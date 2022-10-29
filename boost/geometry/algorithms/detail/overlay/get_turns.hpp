@@ -62,9 +62,7 @@
 #include <boost/geometry/util/math.hpp>
 #include <boost/geometry/util/type_traits.hpp>
 
-#include <boost/geometry/views/closeable_view.hpp>
-#include <boost/geometry/views/reversible_view.hpp>
-#include <boost/geometry/views/detail/range_type.hpp>
+#include <boost/geometry/views/detail/closed_clockwise_view.hpp>
 
 
 #ifdef BOOST_GEOMETRY_DEBUG_INTERSECTION
@@ -113,7 +111,7 @@ template
 >
 struct unique_sub_range_from_section
 {
-    typedef Point point_type;
+    using point_type = Point;
 
     unique_sub_range_from_section(Section const& section, signed_size_type index,
                           CircularIterator circular_iterator,
@@ -125,7 +123,7 @@ struct unique_sub_range_from_section
         , m_previous_point(previous)
         , m_current_point(current)
         , m_circular_iterator(circular_iterator)
-        , m_point_retrieved(false)
+        , m_next_point_retrieved(false)
         , m_strategy(strategy)
         , m_robust_policy(robust_policy)
     {}
@@ -160,18 +158,18 @@ struct unique_sub_range_from_section
 private :
     inline Point const& get_next_point() const
     {
-        if (! m_point_retrieved)
+        if (! m_next_point_retrieved)
         {
             advance_to_non_duplicate_next(m_current_point, m_circular_iterator);
-            m_point = *m_circular_iterator;
-            m_point_retrieved = true;
+            m_next_point_retrieved = true;
         }
-        return m_point;
+        return *m_circular_iterator;
     }
 
     inline void advance_to_non_duplicate_next(Point const& current, CircularIterator& circular_iterator) const
     {
-        typedef typename robust_point_type<Point, RobustPolicy>::type robust_point_type;
+        using box_point_type = typename geometry::point_type<typename Section::box_type>::type;
+        using robust_point_type = typename robust_point_type<box_point_type, RobustPolicy>::type;
         robust_point_type current_robust_point;
         robust_point_type next_robust_point;
         geometry::recalculate(current_robust_point, current, m_robust_policy);
@@ -201,8 +199,7 @@ private :
     Point const& m_previous_point;
     Point const& m_current_point;
     mutable CircularIterator m_circular_iterator;
-    mutable Point m_point;
-    mutable bool m_point_retrieved;
+    mutable bool m_next_point_retrieved;
     Strategy m_strategy;
     RobustPolicy m_robust_policy;
 };
@@ -216,40 +213,24 @@ template
 >
 class get_turns_in_sections
 {
-    typedef typename closeable_view
+    using range1_view = detail::closed_clockwise_view
         <
-            typename range_type<Geometry1>::type const,
-            closure<Geometry1>::value
-        >::type cview_type1;
-    typedef typename closeable_view
+            typename ring_type<Geometry1>::type const,
+            geometry::closure<Geometry1>::value,
+            Reverse1 ? counterclockwise : clockwise
+        >;
+    using range2_view = detail::closed_clockwise_view
         <
-            typename range_type<Geometry2>::type const,
-            closure<Geometry2>::value
-        >::type cview_type2;
+            typename ring_type<Geometry2>::type const,
+            geometry::closure<Geometry2>::value,
+            Reverse2 ? counterclockwise : clockwise
+        >;
 
-    typedef typename reversible_view
-        <
-            cview_type1 const,
-            Reverse1 ? iterate_reverse : iterate_forward
-        >::type view_type1;
-    typedef typename reversible_view
-        <
-            cview_type2 const,
-            Reverse2 ? iterate_reverse : iterate_forward
-        >::type view_type2;
+    using range1_iterator = typename boost::range_iterator<range1_view const>::type;
+    using range2_iterator = typename boost::range_iterator<range2_view const>::type;
 
-    typedef typename boost::range_iterator
-        <
-            view_type1 const
-        >::type range1_iterator;
-
-    typedef typename boost::range_iterator
-        <
-            view_type2 const
-        >::type range2_iterator;
-
-    typedef ever_circling_iterator<range1_iterator> circular1_iterator;
-    typedef ever_circling_iterator<range2_iterator> circular2_iterator;
+    using circular1_iterator = ever_circling_iterator<range1_iterator>;
+    using circular2_iterator = ever_circling_iterator<range2_iterator>;
 
     template <typename Geometry, typename Section>
     static inline bool adjacent(Section const& section,
@@ -299,10 +280,8 @@ public :
             return true;
         }
 
-        cview_type1 cview1(range_by_section(geometry1, sec1));
-        cview_type2 cview2(range_by_section(geometry2, sec2));
-        view_type1 view1(cview1);
-        view_type2 view2(cview2);
+        range1_view const view1(range_by_section(geometry1, sec1));
+        range2_view const view2(range_by_section(geometry2, sec2));
 
         range1_iterator begin_range_1 = boost::begin(view1);
         range1_iterator end_range_1 = boost::end(view1);
@@ -322,7 +301,7 @@ public :
 
         // We need a circular iterator because it might run through the closing point.
         // One circle is actually enough but this one is just convenient.
-        ever_circling_iterator<range1_iterator> next1(begin_range_1, end_range_1, it1, true);
+        circular1_iterator next1(begin_range_1, end_range_1, it1, true);
         next1++;
 
         // Walk through section and stop if we exceed the other box
@@ -348,7 +327,7 @@ public :
 
             get_start_point_iterator(sec2, view2, prev2, it2, end2,
                         index2, ndi2, dir2, sec1.bounding_box, robust_policy);
-            ever_circling_iterator<range2_iterator> next2(begin_range_2, end_range_2, it2, true);
+            circular2_iterator next2(begin_range_2, end_range_2, it2, true);
             next2++;
 
             for (prev2 = it2++, next2++;
@@ -593,22 +572,14 @@ struct get_turns_cs
     typedef typename geometry::point_type<Box>::type box_point_type;
     typedef boost::array<box_point_type, 4> box_array;
 
-    typedef typename closeable_view
+    using view_type = detail::closed_clockwise_view
         <
             Range const,
-            closure<Range>::value
-        >::type cview_type;
+            geometry::closure<Range>::value,
+            ReverseRange ? counterclockwise : clockwise
+        >;
 
-    typedef typename reversible_view
-        <
-            cview_type const,
-            ReverseRange ? iterate_reverse : iterate_forward
-        >::type view_type;
-
-    typedef typename boost::range_iterator
-        <
-            view_type const
-        >::type iterator_type;
+    using iterator_type = typename boost::range_iterator<view_type const>::type;
 
     struct unique_sub_range_from_box_policy
     {
@@ -694,8 +665,7 @@ struct get_turns_cs
         box_array box_points;
         assign_box_corners_oriented<ReverseBox>(box, box_points);
 
-        cview_type cview(range);
-        view_type view(cview);
+        view_type const view(range);
 
         // TODO: in this code, possible duplicate points are not yet taken
         // into account (not in the iterator, nor in the retrieve policy)
@@ -956,24 +926,24 @@ struct get_turn_info_type<Geometry1, Geometry2, AssignPolicy, Tag1, Tag2, linear
     : overlay::get_turn_info_linear_areal<AssignPolicy>
 {};
 
-template <typename Geometry1, typename Geometry2, typename SegmentRatio,
+template <typename Geometry1, typename Geometry2, typename Point, typename SegmentRatio,
           typename Tag1 = typename tag<Geometry1>::type, typename Tag2 = typename tag<Geometry2>::type,
           typename TagBase1 = typename topological_tag_base<Geometry1>::type, typename TagBase2 = typename topological_tag_base<Geometry2>::type>
 struct turn_operation_type
 {
-    typedef overlay::turn_operation<typename point_type<Geometry1>::type, SegmentRatio> type;
+    using type = overlay::turn_operation<Point, SegmentRatio>;
 };
 
-template <typename Geometry1, typename Geometry2, typename SegmentRatio, typename Tag1, typename Tag2>
-struct turn_operation_type<Geometry1, Geometry2, SegmentRatio, Tag1, Tag2, linear_tag, linear_tag>
+template <typename Geometry1, typename Geometry2, typename Point, typename SegmentRatio, typename Tag1, typename Tag2>
+struct turn_operation_type<Geometry1, Geometry2, Point, SegmentRatio, Tag1, Tag2, linear_tag, linear_tag>
 {
-    typedef overlay::turn_operation_linear<typename point_type<Geometry1>::type, SegmentRatio> type;
+    using type = overlay::turn_operation_linear<Point, SegmentRatio>;
 };
 
-template <typename Geometry1, typename Geometry2, typename SegmentRatio, typename Tag1, typename Tag2>
-struct turn_operation_type<Geometry1, Geometry2, SegmentRatio, Tag1, Tag2, linear_tag, areal_tag>
+template <typename Geometry1, typename Geometry2, typename Point, typename SegmentRatio, typename Tag1, typename Tag2>
+struct turn_operation_type<Geometry1, Geometry2, Point, SegmentRatio, Tag1, Tag2, linear_tag, areal_tag>
 {
-    typedef overlay::turn_operation_linear<typename point_type<Geometry1>::type, SegmentRatio> type;
+    using type = overlay::turn_operation_linear<Point, SegmentRatio>;
 };
 
 }} // namespace detail::get_turns

@@ -13,6 +13,7 @@
 #include <boost/json/array.hpp>
 #include <boost/json/pilfer.hpp>
 #include <boost/json/detail/except.hpp>
+#include <boost/json/detail/hash_combine.hpp>
 #include <cstdlib>
 #include <limits>
 #include <new>
@@ -189,7 +190,7 @@ array(detail::unchecked_array&& ua)
 }
 
 array::
-~array()
+~array() noexcept
 {
     destroy();
 }
@@ -487,12 +488,7 @@ erase(
     BOOST_ASSERT(
         pos >= begin() &&
         pos <= end());
-    auto const p = &(*t_)[0] +
-        (pos - &(*t_)[0]);
-    destroy(p, p + 1);
-    relocate(p, p + 1, 1);
-    --t_->size;
-    return p;
+    return erase(pos, pos + 1);
 }
 
 auto
@@ -502,6 +498,10 @@ erase(
     const_iterator last) noexcept ->
         iterator
 {
+    BOOST_ASSERT(
+        first >= begin() &&
+        last >= first &&
+        last <= end());
     std::size_t const n =
         last - first;
     auto const p = &(*t_)[0] +
@@ -753,5 +753,26 @@ equal(
 }
 
 BOOST_JSON_NS_END
+
+//----------------------------------------------------------
+//
+// std::hash specialization
+//
+//----------------------------------------------------------
+
+std::size_t
+std::hash<::boost::json::array>::operator()(
+    ::boost::json::array const& ja) const noexcept
+{
+  std::size_t seed = ja.size();
+  for (const auto& jv : ja) {
+    seed = ::boost::json::detail::hash_combine(
+        seed,
+        std::hash<::boost::json::value>{}(jv));
+  }
+  return seed;
+}
+
+//----------------------------------------------------------
 
 #endif

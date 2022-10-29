@@ -11,7 +11,8 @@
 #  define BOOST_MATH_PFQ_MAX_B_TERMS 5
 #endif
 
-#include <boost/array.hpp>
+#include <array>
+#include <cstdint>
 #include <boost/math/special_functions/detail/hypergeometric_series.hpp>
 
   namespace boost { namespace math { namespace detail {
@@ -124,13 +125,14 @@
         Real term = 1;
         Real term0 = 0;
         Real tol = boost::math::policies::get_epsilon<Real, Policy>();
-        boost::uintmax_t k = 0;
+        std::uintmax_t k = 0;
         Real upper_limit(sqrt(boost::math::tools::max_value<Real>())), diff;
         Real lower_limit(1 / upper_limit);
         long long log_scaling_factor = lltrunc(boost::math::tools::log_max_value<Real>()) - 2;
         Real scaling_factor = exp(Real(log_scaling_factor));
         Real term_m1;
         long long local_scaling = 0;
+        bool have_no_correct_bits = false;
 
         if ((aj.size() == 1) && (bj.size() == 0))
         {
@@ -237,10 +239,20 @@
               break;
            if (abs_result * tol > abs(result))
            {
-              // We have no correct bits in the result... just give up!
-              result = boost::math::policies::raise_evaluation_error("boost::math::hypergeometric_pFq<%1%>", "Cancellation is so severe that no bits in the reuslt are correct, last result was %1%", Real(result * exp(Real(log_scale))), pol);
-              return std::make_pair(result, result);
+              // Check if result is so small compared to abs_resuslt that there are no longer any
+              // correct bits... we require two consecutive passes here before aborting to
+              // avoid false positives when result transiently drops to near zero then rebounds.
+              if (have_no_correct_bits)
+              {
+                 // We have no correct bits in the result... just give up!
+                 result = boost::math::policies::raise_evaluation_error("boost::math::hypergeometric_pFq<%1%>", "Cancellation is so severe that no bits in the reuslt are correct, last result was %1%", Real(result * exp(Real(log_scale))), pol);
+                 return std::make_pair(result, result);
+              }
+              else
+                 have_no_correct_bits = true;
            }
+           else
+              have_no_correct_bits = false;
            term0 = term;
         }
         //std::cout << "result = " << result << std::endl;
@@ -287,7 +299,7 @@
               // so we need to jump forward to that term and then evaluate forwards and backwards from there:
               //
               unsigned s = crossover_locations[n];
-              boost::uintmax_t backstop = k;
+              std::uintmax_t backstop = k;
               long long s1(1), s2(1);
               term = 0;
               for (auto ai = aj.begin(); ai != aj.end(); ++ai)
@@ -450,7 +462,7 @@
                // local results we have now.  First though, rescale abs_result by loop_error_scale
                // to factor in the error in the pochhammer terms at the start of this block:
                //
-               boost::uintmax_t next_backstop = k;
+               std::uintmax_t next_backstop = k;
                loop_abs_result += loop_error_scale * fabs(loop_result);
                if (loop_scale > local_scaling)
                {
@@ -614,11 +626,11 @@
 
      struct iteration_terminator
      {
-        iteration_terminator(boost::uintmax_t i) : m(i) {}
+        iteration_terminator(std::uintmax_t i) : m(i) {}
 
-        bool operator()(boost::uintmax_t v) const { return v >= m; }
+        bool operator()(std::uintmax_t v) const { return v >= m; }
 
-        boost::uintmax_t m;
+        std::uintmax_t m;
      };
 
      template <class Seq, class Real, class Policy>
@@ -641,8 +653,8 @@
      template <class Real, class Policy>
      inline Real hypergeometric_1F1_checked_series_impl(const Real& a, const Real& b, const Real& z, const Policy& pol, long long& log_scale)
      {
-        boost::array<Real, 1> aj = { a };
-        boost::array<Real, 1> bj = { b };
+        std::array<Real, 1> aj = { a };
+        std::array<Real, 1> bj = { b };
         return hypergeometric_pFq_checked_series_impl(aj, bj, z, pol, log_scale);
      }
 

@@ -8,8 +8,8 @@
 #define BOOST_MATH_STATISTICS_UNIVARIATE_STATISTICS_HPP
 
 #include <boost/math/statistics/detail/single_pass.hpp>
-#include <boost/config.hpp>
-#include <boost/assert.hpp>
+#include <boost/math/tools/config.hpp>
+#include <boost/math/tools/assert.hpp>
 #include <algorithm>
 #include <iterator>
 #include <tuple>
@@ -20,9 +20,7 @@
 #include <numeric>
 #include <list>
 
-// Support compilers with P0024R2 implemented without linking TBB
-// https://en.cppreference.com/w/cpp/compiler_support
-#ifndef BOOST_NO_CXX17_HDR_EXECUTION
+#ifdef BOOST_MATH_EXEC_COMPATIBLE
 #include <execution>
 
 namespace boost::math::statistics {
@@ -31,7 +29,7 @@ template<class ExecutionPolicy, class ForwardIterator>
 inline auto mean(ExecutionPolicy&& exec, ForwardIterator first, ForwardIterator last)
 {
     using Real = typename std::iterator_traits<ForwardIterator>::value_type;
-    BOOST_ASSERT_MSG(first != last, "At least one sample is required to compute the mean.");
+    BOOST_MATH_ASSERT_MSG(first != last, "At least one sample is required to compute the mean.");
     
     if constexpr (std::is_integral_v<Real>)
     {
@@ -128,7 +126,7 @@ template<class ExecutionPolicy, class ForwardIterator>
 inline auto sample_variance(ExecutionPolicy&& exec, ForwardIterator first, ForwardIterator last)
 {
     const auto n = std::distance(first, last);
-    BOOST_ASSERT_MSG(n > 1, "At least two samples are required to compute the sample variance.");
+    BOOST_MATH_ASSERT_MSG(n > 1, "At least two samples are required to compute the sample variance.");
     return n*variance(exec, first, last)/(n-1);
 }
 
@@ -378,7 +376,7 @@ template<class ExecutionPolicy, class RandomAccessIterator>
 auto median(ExecutionPolicy&& exec, RandomAccessIterator first, RandomAccessIterator last)
 {
     const auto num_elems = std::distance(first, last);
-    BOOST_ASSERT_MSG(num_elems > 0, "The median of a zero length vector is undefined.");
+    BOOST_MATH_ASSERT_MSG(num_elems > 0, "The median of a zero length vector is undefined.");
     if (num_elems & 1)
     {
         auto middle = first + (num_elems - 1)/2;
@@ -528,7 +526,7 @@ auto median_absolute_deviation(ExecutionPolicy&& exec, RandomAccessIterator firs
         center = boost::math::statistics::median(exec, first, last);
     }
     const auto num_elems = std::distance(first, last);
-    BOOST_ASSERT_MSG(num_elems > 0, "The median of a zero-length vector is undefined.");
+    BOOST_MATH_ASSERT_MSG(num_elems > 0, "The median of a zero-length vector is undefined.");
     auto comparator = [&center](Real a, Real b) { return abs(a-center) < abs(b-center);};
     if (num_elems & 1)
     {
@@ -572,7 +570,7 @@ auto interquartile_range(ExecutionPolicy&& exec, ForwardIterator first, ForwardI
     using Real = typename std::iterator_traits<ForwardIterator>::value_type;
     static_assert(!std::is_integral_v<Real>, "Integer values have not yet been implemented.");
     auto m = std::distance(first,last);
-    BOOST_ASSERT_MSG(m >= 3, "At least 3 samples are required to compute the interquartile range.");
+    BOOST_MATH_ASSERT_MSG(m >= 3, "At least 3 samples are required to compute the interquartile range.");
     auto k = m/4;
     auto j = m - (4*k);
     // m = 4k+j.
@@ -636,7 +634,7 @@ inline OutputIterator mode(ExecutionPolicy&& exec, ForwardIterator first, Forwar
         }
         else
         {
-            BOOST_ASSERT("Data must be sorted for sequential mode calculation");
+            BOOST_MATH_ASSERT("Data must be sorted for sequential mode calculation");
         }
     }
 
@@ -699,7 +697,7 @@ inline auto mode(Container & v)
 
 } // Namespace boost::math::statistics
 
-#else // Backwards compatible bindings for C++11
+#else // Backwards compatible bindings for C++11 or execution is not implemented
 
 namespace boost { namespace math { namespace statistics {
 
@@ -710,7 +708,7 @@ template<class ForwardIterator, typename Real = typename std::iterator_traits<Fo
          enable_if_t<std::is_integral<Real>::value, bool> = true>
 inline double mean(const ForwardIterator first, const ForwardIterator last)
 {
-    BOOST_ASSERT_MSG(first != last, "At least one sample is required to compute the mean.");
+    BOOST_MATH_ASSERT_MSG(first != last, "At least one sample is required to compute the mean.");
     return detail::mean_sequential_impl<double>(first, last);
 }
 
@@ -725,7 +723,7 @@ template<class ForwardIterator, typename Real = typename std::iterator_traits<Fo
          enable_if_t<!std::is_integral<Real>::value, bool> = true>
 inline Real mean(const ForwardIterator first, const ForwardIterator last)
 {
-    BOOST_ASSERT_MSG(first != last, "At least one sample is required to compute the mean.");
+    BOOST_MATH_ASSERT_MSG(first != last, "At least one sample is required to compute the mean.");
     return detail::mean_sequential_impl<Real>(first, last);
 }
 
@@ -770,7 +768,7 @@ template<class ForwardIterator, typename Real = typename std::iterator_traits<Fo
 inline double sample_variance(const ForwardIterator first, const ForwardIterator last)
 {
     const auto n = std::distance(first, last);
-    BOOST_ASSERT_MSG(n > 1, "At least two samples are required to compute the sample variance.");
+    BOOST_MATH_ASSERT_MSG(n > 1, "At least two samples are required to compute the sample variance.");
     return n*variance(first, last)/(n-1);
 }
 
@@ -786,7 +784,7 @@ template<class ForwardIterator, typename Real = typename std::iterator_traits<Fo
 inline Real sample_variance(const ForwardIterator first, const ForwardIterator last)
 {
     const auto n = std::distance(first, last);
-    BOOST_ASSERT_MSG(n > 1, "At least two samples are required to compute the sample variance.");
+    BOOST_MATH_ASSERT_MSG(n > 1, "At least two samples are required to compute the sample variance.");
     return n*variance(first, last)/(n-1);
 }
 
@@ -965,7 +963,7 @@ template<class RandomAccessIterator, typename Real = typename std::iterator_trai
 Real median(RandomAccessIterator first, RandomAccessIterator last)
 {
     const auto num_elems = std::distance(first, last);
-    BOOST_ASSERT_MSG(num_elems > 0, "The median of a zero length vector is undefined.");
+    BOOST_MATH_ASSERT_MSG(num_elems > 0, "The median of a zero length vector is undefined.");
     if (num_elems & 1)
     {
         auto middle = first + (num_elems - 1)/2;
@@ -1066,7 +1064,7 @@ Real median_absolute_deviation(RandomAccessIterator first, RandomAccessIterator 
         center = boost::math::statistics::median(first, last);
     }
     const auto num_elems = std::distance(first, last);
-    BOOST_ASSERT_MSG(num_elems > 0, "The median of a zero-length vector is undefined.");
+    BOOST_MATH_ASSERT_MSG(num_elems > 0, "The median of a zero-length vector is undefined.");
     auto comparator = [&center](Real a, Real b) { return abs(a-center) < abs(b-center);};
     if (num_elems & 1)
     {
@@ -1095,7 +1093,7 @@ Real interquartile_range(ForwardIterator first, ForwardIterator last)
 {
     static_assert(!std::is_integral<Real>::value, "Integer values have not yet been implemented.");
     auto m = std::distance(first,last);
-    BOOST_ASSERT_MSG(m >= 3, "At least 3 samples are required to compute the interquartile range.");
+    BOOST_MATH_ASSERT_MSG(m >= 3, "At least 3 samples are required to compute the interquartile range.");
     auto k = m/4;
     auto j = m - (4*k);
     // m = 4k+j.
@@ -1156,7 +1154,7 @@ inline OutputIterator mode(ForwardIterator first, ForwardIterator last, OutputIt
 {   
     if(!std::is_sorted(first, last))
     {
-        BOOST_ASSERT("Data must be sorted for mode calculation");
+        BOOST_MATH_ASSERT("Data must be sorted for mode calculation");
     }
 
     return detail::mode_impl(first, last, output);

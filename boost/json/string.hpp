@@ -153,7 +153,7 @@ public:
         @par Exception Safety
         No-throw guarantee.
     */
-    ~string()
+    ~string() noexcept
     {
         impl_.destroy(sp_);
     }
@@ -1134,6 +1134,25 @@ public:
         return {data(), size()};
     }
 
+#if ! defined(BOOST_NO_CXX17_HDR_STRING_VIEW)
+    /** Convert to a `std::string_view` referring to the string.
+
+        Returns a string view to the underlying character string. The size of
+        the view does not include the null terminator.
+
+        This overload is not defined when `BOOST_NO_CXX17_HDR_STRING_VIEW`
+        is defined.
+
+        @par Complexity
+
+        Constant.
+    */
+    operator std::string_view() const noexcept
+    {
+        return {data(), size()};
+    }
+#endif
+
     //------------------------------------------------------
     //
     // Iterators
@@ -1926,7 +1945,7 @@ public:
     int
     compare(string_view sv) const noexcept
     {
-        return string_view(*this).compare(sv);
+        return subview().compare(sv);
     }
 
     //------------------------------------------------------
@@ -2207,7 +2226,7 @@ public:
 
     //------------------------------------------------------
 
-    /** Return a substring.
+    /** Return a view.
 
         Returns a view of a substring.
 
@@ -2215,8 +2234,7 @@ public:
 
         Strong guarantee.
 
-        @return A `string_view` object referring
-        to `{data() + pos, std::min(count, size() - pos))`.
+        @return `this->subview().substr(pos, count)`
 
         @param pos The index to being the substring at.
         The default argument for this parameter is `0`.
@@ -2229,10 +2247,26 @@ public:
     */
     string_view
     subview(
-        std::size_t pos = 0,
-        std::size_t count = npos) const
+        std::size_t pos
+        ,std::size_t count = npos) const
     {
-        return string_view(*this).substr(pos, count);
+        return subview().substr(pos, count);
+    }
+
+    /** Return a view.
+
+        Returns a view of the whole string.
+
+        @par Exception Safety
+
+        `noexcept`
+
+        @return `string_view(this->data(), this->size())`.
+    */
+    string_view
+    subview() const noexcept
+    {
+        return string_view( data(), size() );
     }
 
     //------------------------------------------------------
@@ -2262,7 +2296,7 @@ public:
         std::size_t count,
         std::size_t pos = 0) const
     {
-        return string_view(*this).copy(dest, count, pos);
+        return subview().copy(dest, count, pos);
     }
 
     //------------------------------------------------------
@@ -2441,7 +2475,7 @@ public:
         string_view sv,
         std::size_t pos = 0) const noexcept
     {
-        return string_view(*this).find(sv, pos);
+        return subview().find(sv, pos);
     }
 
     /** Find the first occurrence of a character within the string.
@@ -2468,7 +2502,7 @@ public:
         char ch,
         std::size_t pos = 0) const noexcept
     {
-        return string_view(*this).find(ch, pos);
+        return subview().find(ch, pos);
     }
 
     //------------------------------------------------------
@@ -2499,7 +2533,7 @@ public:
         string_view sv,
         std::size_t pos = npos) const noexcept
     {
-        return string_view(*this).rfind(sv, pos);
+        return subview().rfind(sv, pos);
     }
 
     /** Find the last occurrence of a character within the string.
@@ -2527,7 +2561,7 @@ public:
         char ch,
         std::size_t pos = npos) const noexcept
     {
-        return string_view(*this).rfind(ch, pos);
+        return subview().rfind(ch, pos);
     }
 
     //------------------------------------------------------
@@ -2558,7 +2592,7 @@ public:
         string_view sv,
         std::size_t pos = 0) const noexcept
     {
-        return string_view(*this).find_first_of(sv, pos);
+        return subview().find_first_of(sv, pos);
     }
 
     //------------------------------------------------------
@@ -2588,7 +2622,7 @@ public:
         string_view sv,
         std::size_t pos = 0) const noexcept
     {
-        return string_view(*this).find_first_not_of(sv, pos);
+        return subview().find_first_not_of(sv, pos);
     }
 
     /** Find the first occurrence of a character not equal to `ch`.
@@ -2615,7 +2649,7 @@ public:
         char ch,
         std::size_t pos = 0) const noexcept
     {
-        return string_view(*this).find_first_not_of(ch, pos);
+        return subview().find_first_not_of(ch, pos);
     }
 
     //------------------------------------------------------
@@ -2647,7 +2681,7 @@ public:
         string_view sv,
         std::size_t pos = npos) const noexcept
     {
-        return string_view(*this).find_last_of(sv, pos);
+        return subview().find_last_of(sv, pos);
     }
 
     //------------------------------------------------------
@@ -2677,7 +2711,7 @@ public:
         string_view sv,
         std::size_t pos = npos) const noexcept
     {
-        return string_view(*this).find_last_not_of(sv, pos);
+        return subview().find_last_not_of(sv, pos);
     }
 
     /** Find the last occurrence of a character not equal to `ch`.
@@ -2706,7 +2740,7 @@ public:
         char ch,
         std::size_t pos = npos) const noexcept
     {
-        return string_view(*this).find_last_not_of(ch, pos);
+        return subview().find_last_not_of(ch, pos);
     }
 
 private:
@@ -2743,6 +2777,20 @@ private:
 
 //----------------------------------------------------------
 
+namespace detail
+{
+
+template <>
+inline
+string_view
+to_string_view<string>(string const& s) noexcept
+{
+    return s.subview();
+}
+
+} // namespace detail
+
+
 /** Return true if lhs equals rhs.
 
     A lexicographical comparison is used.
@@ -2752,18 +2800,11 @@ bool
 operator==(string const& lhs, string const& rhs) noexcept
 #else
 template<class T, class U>
-typename std::enable_if<
-    (std::is_same<T, string>::value &&
-     std::is_convertible<
-        U const&, string_view>::value) ||
-    (std::is_same<U, string>::value &&
-     std::is_convertible<
-        T const&, string_view>::value),
-    bool>::type
+detail::string_comp_op_requirement<T, U>
 operator==(T const& lhs, U const& rhs) noexcept
 #endif
 {
-    return string_view(lhs) == string_view(rhs);
+    return detail::to_string_view(lhs) == detail::to_string_view(rhs);
 }
 
 /** Return true if lhs does not equal rhs.
@@ -2775,18 +2816,11 @@ bool
 operator!=(string const& lhs, string const& rhs) noexcept
 #else
 template<class T, class U>
-typename std::enable_if<
-    (std::is_same<T, string>::value &&
-     std::is_convertible<
-        U const&, string_view>::value) ||
-    (std::is_same<U, string>::value &&
-     std::is_convertible<
-        T const&, string_view>::value),
-    bool>::type
+detail::string_comp_op_requirement<T, U>
 operator!=(T const& lhs, U const& rhs) noexcept
 #endif
 {
-    return string_view(lhs) != string_view(rhs);
+    return detail::to_string_view(lhs) != detail::to_string_view(rhs);
 }
 
 /** Return true if lhs is less than rhs.
@@ -2798,18 +2832,11 @@ bool
 operator<(string const& lhs, string const& rhs) noexcept
 #else
 template<class T, class U>
-typename std::enable_if<
-    (std::is_same<T, string>::value &&
-     std::is_convertible<
-        U const&, string_view>::value) ||
-    (std::is_same<U, string>::value &&
-     std::is_convertible<
-        T const&, string_view>::value),
-    bool>::type
+detail::string_comp_op_requirement<T, U>
 operator<(T const& lhs, U const& rhs) noexcept
 #endif
 {
-    return string_view(lhs) < string_view(rhs);
+    return detail::to_string_view(lhs) < detail::to_string_view(rhs);
 }
 
 /** Return true if lhs is less than or equal to rhs.
@@ -2821,18 +2848,11 @@ bool
 operator<=(string const& lhs, string const& rhs) noexcept
 #else
 template<class T, class U>
-typename std::enable_if<
-    (std::is_same<T, string>::value &&
-     std::is_convertible<
-        U const&, string_view>::value) ||
-    (std::is_same<U, string>::value &&
-     std::is_convertible<
-        T const&, string_view>::value),
-    bool>::type
+detail::string_comp_op_requirement<T, U>
 operator<=(T const& lhs, U const& rhs) noexcept
 #endif
 {
-    return string_view(lhs) <= string_view(rhs);
+    return detail::to_string_view(lhs) <= detail::to_string_view(rhs);
 }
 
 #ifdef BOOST_JSON_DOCS
@@ -2840,18 +2860,11 @@ bool
 operator>=(string const& lhs, string const& rhs) noexcept
 #else
 template<class T, class U>
-typename std::enable_if<
-    (std::is_same<T, string>::value &&
-     std::is_convertible<
-        U const&, string_view>::value) ||
-    (std::is_same<U, string>::value &&
-     std::is_convertible<
-        T const&, string_view>::value),
-    bool>::type
+detail::string_comp_op_requirement<T, U>
 operator>=(T const& lhs, U const& rhs) noexcept
 #endif
 {
-    return string_view(lhs) >= string_view(rhs);
+    return detail::to_string_view(lhs) >= detail::to_string_view(rhs);
 }
 
 /** Return true if lhs is greater than rhs.
@@ -2863,18 +2876,11 @@ bool
 operator>(string const& lhs, string const& rhs) noexcept
 #else
 template<class T, class U>
-typename std::enable_if<
-    (std::is_same<T, string>::value &&
-     std::is_convertible<
-        U const&, string_view>::value) ||
-    (std::is_same<U, string>::value &&
-     std::is_convertible<
-        T const&, string_view>::value),
-    bool>::type
+detail::string_comp_op_requirement<T, U>
 operator>(T const& lhs, U const& rhs) noexcept
 #endif
 {
-    return string_view(lhs) > string_view(rhs);
+    return detail::to_string_view(lhs) > detail::to_string_view(rhs);
 }
 
 BOOST_JSON_NS_END
@@ -2899,7 +2905,7 @@ struct hash< ::boost::json::string >
     operator()(::boost::json::string const& js) const noexcept
     {
         return ::boost::json::detail::digest(
-            js.data(), js.size(), salt_);
+            js.begin(), js.end(), salt_);
     }
 
 private:
